@@ -5,6 +5,7 @@ import java.util.List;
 
 import org.springframework.stereotype.Service;
 
+import cl.duoc.vidasalud.ms_vidasalud_appointments.exception.NotFoundException;
 import cl.duoc.vidasalud.ms_vidasalud_appointments.model.Appointment;
 import cl.duoc.vidasalud.ms_vidasalud_appointments.model.AppointmentStatus;
 import cl.duoc.vidasalud.ms_vidasalud_appointments.repository.AppointmentRepository;
@@ -37,7 +38,7 @@ public class AppointmentService {
     public Appointment buscarPorId(Long id) {
         return repository.findById(id)
                 .orElseThrow(() ->
-                    new RuntimeException("Atención no encontrada con ID: " + id)
+                    new NotFoundException("Atención no encontrada con ID: " + id)
                 );
     }
 
@@ -57,7 +58,8 @@ public class AppointmentService {
     public List<Appointment> filtrar(
             AppointmentStatus status,
             LocalDateTime from,
-            LocalDateTime to) {
+            LocalDateTime to,
+            String pacienteEmail) {
 
         if (from != null && to != null && from.isAfter(to)) {
             throw new IllegalArgumentException(
@@ -65,7 +67,7 @@ public class AppointmentService {
             );
         }
 
-        return repository.filtrar(status, from, to);
+        return repository.filtrar(status, from, to, pacienteEmail);
     }
 
     private void validarTransicion(
@@ -100,4 +102,4 @@ public class AppointmentService {
             );
         }
     }
-}
+}

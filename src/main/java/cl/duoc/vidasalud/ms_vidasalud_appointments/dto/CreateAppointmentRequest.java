@@ -2,12 +2,17 @@ package cl.duoc.vidasalud.ms_vidasalud_appointments.dto;
 
 import java.time.LocalDateTime;
 
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 
 public record CreateAppointmentRequest(
 
-        @NotNull
-        Long pacienteId,
+        @NotBlank
+        @Email
+        @Size(max = 254)
+        String pacienteEmail,
 
         @NotNull
         Long prestacionId,
@@ -16,6 +21,5 @@ public record CreateAppointmentRequest(
 
         @NotNull
         LocalDateTime fechaHora
-
 ) {
 }

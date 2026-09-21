@@ -37,8 +37,7 @@ public class AppointmentController {
             @Valid @RequestBody CreateAppointmentRequest request) {
 
         Appointment appointment = new Appointment();
-
-        appointment.setPacienteId(request.pacienteId());
+        appointment.setPacienteEmail(request.pacienteEmail());
         appointment.setPrestacionId(request.prestacionId());
         appointment.setBoxId(request.boxId());
         appointment.setFechaHora(request.fechaHora());
@@ -61,9 +60,12 @@ public class AppointmentController {
 
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
-            LocalDateTime to) {
+            LocalDateTime to,
 
-        return service.filtrar(status, from, to);
+            @RequestParam(required = false)
+            String pacienteEmail) {
+
+        return service.filtrar(status, from, to, pacienteEmail);
     }
 
     @GetMapping("/{id}")
@@ -74,7 +76,7 @@ public class AppointmentController {
     @PutMapping("/{id}/status")
     public Appointment cambiarEstado(
             @PathVariable Long id,
-            @RequestBody ChangeStatusRequest request) {
+            @Valid @RequestBody ChangeStatusRequest request) {
 
         return service.cambiarEstado(id, request.status());
     }

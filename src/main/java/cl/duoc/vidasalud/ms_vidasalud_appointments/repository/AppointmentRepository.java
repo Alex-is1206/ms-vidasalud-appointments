@@ -19,11 +19,14 @@ public interface AppointmentRepository
         WHERE (:status IS NULL OR a.estado = :status)
           AND (:from IS NULL OR a.fechaHora >= :from)
           AND (:to IS NULL OR a.fechaHora <= :to)
+          AND (:pacienteEmail IS NULL
+               OR LOWER(a.pacienteEmail) = LOWER(:pacienteEmail))
         ORDER BY a.fechaHora ASC
         """)
     List<Appointment> filtrar(
             @Param("status") AppointmentStatus status,
             @Param("from") LocalDateTime from,
-            @Param("to") LocalDateTime to
+            @Param("to") LocalDateTime to,
+            @Param("pacienteEmail") String pacienteEmail
     );
 }
