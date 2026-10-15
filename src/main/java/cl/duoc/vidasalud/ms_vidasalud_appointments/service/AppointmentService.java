@@ -6,6 +6,7 @@ import java.util.List;
 import org.springframework.stereotype.Service;
 
 import cl.duoc.vidasalud.ms_vidasalud_appointments.exception.NotFoundException;
+import cl.duoc.vidasalud.ms_vidasalud_appointments.mensajeria.PublicadorAtenciones;
 import cl.duoc.vidasalud.ms_vidasalud_appointments.model.Appointment;
 import cl.duoc.vidasalud.ms_vidasalud_appointments.model.AppointmentStatus;
 import cl.duoc.vidasalud.ms_vidasalud_appointments.repository.AppointmentRepository;
@@ -14,9 +15,12 @@ import cl.duoc.vidasalud.ms_vidasalud_appointments.repository.AppointmentReposit
 public class AppointmentService {
 
     private final AppointmentRepository repository;
+    private final PublicadorAtenciones publicador;
 
-    public AppointmentService(AppointmentRepository repository) {
+    public AppointmentService(AppointmentRepository repository,
+                              PublicadorAtenciones publicador) {
         this.repository = repository;
+        this.publicador = publicador;
     }
 
     // Crear atención
@@ -51,7 +55,12 @@ public class AppointmentService {
 
         appointment.setEstado(nuevoEstado);
 
-        return repository.save(appointment);
+        Appointment guardada = repository.save(appointment);
+
+        // El evento se publica solo despues de que el cambio quedo en la base de datos
+        publicarSiCorresponde(guardada);
+
+        return guardada;
     }
 
     // Filtrar atenciones
@@ -68,6 +77,27 @@ public class AppointmentService {
         }
 
         return repository.filtrar(status, from, to, pacienteEmail);
+    }
+
+    /**
+     * Publica un evento en RabbitMQ cuando el nuevo estado es relevante para
+     * otros servicios. Los estados intermedios no generan evento.
+     */
+    private void publicarSiCorresponde(Appointment atencion) {
+        switch (atencion.getEstado()) {
+
+            case CONFIRMADA -> publicador.atencionConfirmada(
+                    atencion.getId(),
+                    atencion.getPacienteEmail(),
+                    atencion.getBoxId());
+
+            case CANCELADA -> publicador.atencionCancelada(
+                    atencion.getId(),
+                    atencion.getPacienteEmail(),
+                    "cancelada desde el cambio de estado");
+
+            default -> { /* EN_ESPERA, EN_ATENCION y CERRADA no notifican */ }
+        }
     }
 
     private void validarTransicion(
@@ -102,4 +132,4 @@ public class AppointmentService {
             );
         }
     }
-}
+}
