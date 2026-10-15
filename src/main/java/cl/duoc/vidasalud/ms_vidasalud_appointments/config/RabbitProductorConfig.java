@@ -2,7 +2,7 @@ package cl.duoc.vidasalud.ms_vidasalud_appointments.config;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.amqp.core.DirectExchange;
+import org.springframework.amqp.core.TopicExchange;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.rabbit.core.RabbitAdmin;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -12,26 +12,29 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * Configuracion del lado productor del catalogo.
+ * Configuracion del lado productor de atenciones.
  *
- * El catalogo publica en un exchange de tipo direct porque sus eventos tienen
- * un unico destino conocido: la cola de auditoria. No necesita repartir por
- * patron como si ocurre con las atenciones.
+ * Este microservicio solo publica, por lo tanto declara unicamente el exchange
+ * de tipo topic al que escribe. Las colas y las DLQ las declara el consumidor
+ * (ms-vidasalud-notify), que es el dueno de su propia topologia.
  */
 @Configuration
 public class RabbitProductorConfig {
 
     private static final Logger log = LoggerFactory.getLogger(RabbitProductorConfig.class);
 
-    /** Exchange de tipo direct para los cambios de catalogo. */
-    public static final String EXCHANGE_DIRECT = "cmd.direct";
+    /** Exchange de tipo topic para los eventos de atenciones. */
+    public static final String EXCHANGE_TOPIC = "cmd.topic";
 
-    /** Routing key exacta que escucha la cola de auditoria. */
-    public static final String RK_CATALOGO_CAMBIO = "catalogo.cambio";
+    /** Routing key que se emite cuando una atencion queda confirmada. */
+    public static final String RK_ATENCION_CONFIRMADA = "atencion.confirmada";
+
+    /** Routing key que se emite cuando una atencion se cancela. */
+    public static final String RK_ATENCION_CANCELADA = "atencion.cancelada";
 
     @Bean
-    DirectExchange exchangeCatalogo() {
-        return new DirectExchange(EXCHANGE_DIRECT, true, false);
+    TopicExchange exchangeAtenciones() {
+        return new TopicExchange(EXCHANGE_TOPIC, true, false);
     }
 
     @Bean
@@ -44,6 +47,13 @@ public class RabbitProductorConfig {
         return new JacksonJsonMessageConverter();
     }
 
+    /**
+     * RabbitTemplate con confirmaciones del broker activadas.
+     *
+     * El confirm callback avisa si el broker no acepto el mensaje y el returns
+     * callback avisa si el mensaje fue aceptado pero ninguna cola lo recibio,
+     * lo que normalmente significa que falta un binding.
+     */
     @Bean
     RabbitTemplate rabbitTemplate(ConnectionFactory connectionFactory, MessageConverter conversorJson) {
         RabbitTemplate template = new RabbitTemplate(connectionFactory);
