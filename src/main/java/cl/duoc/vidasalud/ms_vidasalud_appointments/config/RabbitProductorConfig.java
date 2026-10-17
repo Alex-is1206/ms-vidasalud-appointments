@@ -15,15 +15,15 @@ import org.springframework.context.annotation.Configuration;
  * Configuracion del lado productor de atenciones.
  *
  * Este microservicio solo publica, por lo tanto declara unicamente el exchange
- * de tipo topic al que escribe. Las colas y las DLQ las declara el consumidor
- * (ms-vidasalud-notify), que es el dueno de su propia topologia.
+ * de tipo topic al que escribe leyendo su nombre desde NombresRabbit. Las colas
+ * y las DLQ las declara el consumidor (ms-vidasalud-notify).
  */
 @Configuration
 public class RabbitProductorConfig {
 
     private static final Logger log = LoggerFactory.getLogger(RabbitProductorConfig.class);
 
-    /** Exchange de tipo topic para los eventos de atenciones. */
+    /** Exchange de tipo topic por defecto para los eventos de atenciones. */
     public static final String EXCHANGE_TOPIC = "cmd.topic";
 
     /** Routing key que se emite cuando una atencion queda confirmada. */
@@ -32,9 +32,18 @@ public class RabbitProductorConfig {
     /** Routing key que se emite cuando una atencion se cancela. */
     public static final String RK_ATENCION_CANCELADA = "atencion.cancelada";
 
+    private final NombresRabbit nombres;
+
+    public RabbitProductorConfig(NombresRabbit nombres) {
+        this.nombres = nombres;
+    }
+
     @Bean
     TopicExchange exchangeAtenciones() {
-        return new TopicExchange(EXCHANGE_TOPIC, true, false);
+        String nombreExchange = (nombres != null && nombres.exchangeTopic() != null)
+                ? nombres.exchangeTopic()
+                : EXCHANGE_TOPIC;
+        return new TopicExchange(nombreExchange, true, false);
     }
 
     @Bean

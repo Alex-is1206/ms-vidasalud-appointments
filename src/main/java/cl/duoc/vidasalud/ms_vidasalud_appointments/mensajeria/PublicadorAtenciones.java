@@ -9,11 +9,12 @@ import org.springframework.amqp.rabbit.connection.CorrelationData;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Component;
 
+import cl.duoc.vidasalud.ms_vidasalud_appointments.config.NombresRabbit;
 import cl.duoc.vidasalud.ms_vidasalud_appointments.config.RabbitProductorConfig;
 import cl.duoc.vidasalud.ms_vidasalud_appointments.evento.EventoVidaSalud;
 
 /**
- * Publica los eventos de atenciones en el exchange topic.
+ * Publica los eventos de atenciones en el exchange topic configurado en NombresRabbit.
  *
  * La publicacion nunca interrumpe la operacion de negocio: si RabbitMQ no esta
  * disponible, la atencion ya quedo guardada en la base de datos y el error solo
@@ -25,9 +26,11 @@ public class PublicadorAtenciones {
     private static final Logger log = LoggerFactory.getLogger(PublicadorAtenciones.class);
 
     private final RabbitTemplate rabbitTemplate;
+    private final NombresRabbit nombres;
 
-    public PublicadorAtenciones(RabbitTemplate rabbitTemplate) {
+    public PublicadorAtenciones(RabbitTemplate rabbitTemplate, NombresRabbit nombres) {
         this.rabbitTemplate = rabbitTemplate;
+        this.nombres = nombres;
     }
 
     /**
@@ -67,9 +70,13 @@ public class PublicadorAtenciones {
     }
 
     private void publicar(String routingKey, EventoVidaSalud evento) {
+        String exchangeDestino = (nombres != null && nombres.exchangeTopic() != null)
+                ? nombres.exchangeTopic()
+                : RabbitProductorConfig.EXCHANGE_TOPIC;
+
         try {
             rabbitTemplate.convertAndSend(
-                    RabbitProductorConfig.EXCHANGE_TOPIC,
+                    exchangeDestino,
                     routingKey,
                     evento,
                     new CorrelationData(evento.eventId()));
