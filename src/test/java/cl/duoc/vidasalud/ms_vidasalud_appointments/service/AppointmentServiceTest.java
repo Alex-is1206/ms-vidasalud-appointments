@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.time.LocalDateTime;
@@ -18,19 +19,25 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import cl.duoc.vidasalud.ms_vidasalud_appointments.exception.NotFoundException;
+import cl.duoc.vidasalud.ms_vidasalud_appointments.mensajeria.PublicadorAtenciones;
 import cl.duoc.vidasalud.ms_vidasalud_appointments.model.Appointment;
 import cl.duoc.vidasalud.ms_vidasalud_appointments.model.AppointmentStatus;
 import cl.duoc.vidasalud.ms_vidasalud_appointments.repository.AppointmentRepository;
 
 /**
- * Pruebas de la lógica de atenciones. El repositorio se simula con
- * Mockito, así que no necesitan base de datos.
+ * Pruebas de la lógica de atenciones. El repositorio y el publicador se
+ * simulan con Mockito, así que no necesitan base de datos ni broker.
+ * Además de las transiciones de estado, verifican la regla de publicación:
+ * el evento sale solo cuando el cambio se guardó, nunca si se rechaza.
  */
 @ExtendWith(MockitoExtension.class)
 class AppointmentServiceTest {
 
     @Mock
     private AppointmentRepository repository;
+
+    @Mock
+    private PublicadorAtenciones publicador;
 
     @InjectMocks
     private AppointmentService service;
@@ -46,7 +53,7 @@ class AppointmentServiceTest {
     }
 
     @Test
-    @DisplayName("Toda atención nueva parte en SOLICITADA")
+    @DisplayName("Toda atención nueva parte en SOLICITADA y no publica eventos")
     void crearAsignaEstadoSolicitada() {
         when(repository.save(any(Appointment.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -55,10 +62,11 @@ class AppointmentServiceTest {
 
         assertThat(creada.getEstado()).isEqualTo(AppointmentStatus.SOLICITADA);
         assertThat(creada.getId()).isNull();
+        verifyNoInteractions(publicador);
     }
 
     @Test
-    @DisplayName("Transición válida: SOLICITADA -> CONFIRMADA")
+    @DisplayName("Transición válida: SOLICITADA -> CONFIRMADA publica atencion.confirmada")
     void transicionValida() {
         when(repository.findById(1L)).thenReturn(Optional.of(atencionEn(AppointmentStatus.SOLICITADA)));
         when(repository.save(any(Appointment.class))).thenAnswer(inv -> inv.getArgument(0));
@@ -66,10 +74,11 @@ class AppointmentServiceTest {
         Appointment resultado = service.cambiarEstado(1L, AppointmentStatus.CONFIRMADA);
 
         assertThat(resultado.getEstado()).isEqualTo(AppointmentStatus.CONFIRMADA);
+        verify(publicador).atencionConfirmada(any(), any(), any());
     }
 
     @Test
-    @DisplayName("Transición inválida: CONFIRMADA -> CERRADA se rechaza")
+    @DisplayName("Transición inválida: CONFIRMADA -> CERRADA se rechaza sin guardar ni publicar")
     void transicionInvalida() {
         when(repository.findById(1L)).thenReturn(Optional.of(atencionEn(AppointmentStatus.CONFIRMADA)));
 
@@ -78,15 +87,17 @@ class AppointmentServiceTest {
                 .hasMessageContaining("CONFIRMADA -> CERRADA");
 
         verify(repository, never()).save(any(Appointment.class));
+        verifyNoInteractions(publicador);
     }
 
     @Test
-    @DisplayName("Una atención cerrada ya no puede cambiar de estado")
+    @DisplayName("Una atención cerrada ya no puede cambiar de estado ni publicar")
     void estadoFinalNoCambia() {
         when(repository.findById(1L)).thenReturn(Optional.of(atencionEn(AppointmentStatus.CERRADA)));
 
         assertThatThrownBy(() -> service.cambiarEstado(1L, AppointmentStatus.CANCELADA))
                 .isInstanceOf(IllegalStateException.class);
+        verifyNoInteractions(publicador);
     }
 
     @Test
