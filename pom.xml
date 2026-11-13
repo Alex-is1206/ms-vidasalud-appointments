@@ -46,6 +46,12 @@
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-amqp</artifactId>
 		</dependency>
+		<!-- Kafka: productor de eventos de streaming (EP5). En Spring Boot 4 la
+		     autoconfiguracion de Kafka viene en su propio starter. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-kafka</artifactId>
+		</dependency>
 
 		<dependency>
 			<groupId>com.oracle.database.jdbc</groupId>
