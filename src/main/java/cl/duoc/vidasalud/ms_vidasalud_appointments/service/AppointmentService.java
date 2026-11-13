@@ -6,21 +6,35 @@ import java.util.List;
 import org.springframework.stereotype.Service;
 
 import cl.duoc.vidasalud.ms_vidasalud_appointments.exception.NotFoundException;
+import cl.duoc.vidasalud.ms_vidasalud_appointments.kafka.PublicadorAtencionesKafka;
 import cl.duoc.vidasalud.ms_vidasalud_appointments.mensajeria.PublicadorAtenciones;
 import cl.duoc.vidasalud.ms_vidasalud_appointments.model.Appointment;
 import cl.duoc.vidasalud.ms_vidasalud_appointments.model.AppointmentStatus;
 import cl.duoc.vidasalud.ms_vidasalud_appointments.repository.AppointmentRepository;
 
+/**
+ * Logica de negocio de las atenciones.
+ *
+ * No conoce RabbitMQ ni Kafka: despues de guardar, delega en dos publicadores.
+ * - PublicadorAtenciones (RabbitMQ): tareas que alguien debe ejecutar, como avisar
+ *   al paciente o generar el ticket. Solo para confirmaciones y cancelaciones.
+ * - PublicadorAtencionesKafka (Kafka): registro de todo el ciclo de vida, para
+ *   analitica en tiempo real e historial. Se publica en cada creacion y en cada
+ *   cambio de estado.
+ */
 @Service
 public class AppointmentService {
 
     private final AppointmentRepository repository;
     private final PublicadorAtenciones publicador;
+    private final PublicadorAtencionesKafka publicadorKafka;
 
     public AppointmentService(AppointmentRepository repository,
-                              PublicadorAtenciones publicador) {
+                              PublicadorAtenciones publicador,
+                              PublicadorAtencionesKafka publicadorKafka) {
         this.repository = repository;
         this.publicador = publicador;
+        this.publicadorKafka = publicadorKafka;
     }
 
     // Crear atención
@@ -30,7 +44,12 @@ public class AppointmentService {
         appointment.setId(null);
         appointment.setEstado(AppointmentStatus.SOLICITADA);
 
-        return repository.save(appointment);
+        Appointment guardada = repository.save(appointment);
+
+        // El evento de streaming sale solo despues de que la atencion quedo en la base de datos
+        publicadorKafka.atencionCreada(guardada);
+
+        return guardada;
     }
 
     // Listar todas
@@ -50,15 +69,17 @@ public class AppointmentService {
     public Appointment cambiarEstado(Long id, AppointmentStatus nuevoEstado) {
 
         Appointment appointment = buscarPorId(id);
+        AppointmentStatus estadoAnterior = appointment.getEstado();
 
-        validarTransicion(appointment.getEstado(), nuevoEstado);
+        validarTransicion(estadoAnterior, nuevoEstado);
 
         appointment.setEstado(nuevoEstado);
 
         Appointment guardada = repository.save(appointment);
 
-        // El evento se publica solo despues de que el cambio quedo en la base de datos
+        // Los eventos se publican solo despues de que el cambio quedo en la base de datos
         publicarSiCorresponde(guardada);
+        publicadorKafka.estadoCambiado(guardada, estadoAnterior);
 
         return guardada;
     }
@@ -81,7 +102,7 @@ public class AppointmentService {
 
     /**
      * Publica un evento en RabbitMQ cuando el nuevo estado es relevante para
-     * otros servicios. Los estados intermedios no generan evento.
+     * otros servicios. Los estados intermedios no generan tarea.
      */
     private void publicarSiCorresponde(Appointment atencion) {
         switch (atencion.getEstado()) {
@@ -96,7 +117,7 @@ public class AppointmentService {
                     atencion.getPacienteEmail(),
                     "cancelada desde el cambio de estado");
 
-            default -> { /* EN_ESPERA, EN_ATENCION y CERRADA no notifican */ }
+            default -> { /* EN_ESPERA, EN_ATENCION y CERRADA no generan tarea en RabbitMQ */ }
         }
     }
 
